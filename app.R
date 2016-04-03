@@ -97,6 +97,7 @@ server <- function(input, output, session){
                 
   # output$plot ----
   output$plot = renderPlotly({
+    s = input$table_rows_selected
     key <- d_sum$key
     p = ggplot(d_sum, aes(bird, npv, colour=utility, key=key)) +
       geom_point() +
@@ -112,6 +113,9 @@ server <- function(input, output, session){
       geom_hline(yintercept = quantile(d_sum$npv, probs=   0.2 , na.rm=T), linetype=2, col='red') +
       geom_hline(yintercept = quantile(d_sum$npv, probs=   0.6 , na.rm=T), linetype=2, col='blue') + 
       theme(legend.position="none")
+    if (length(s)){
+      p = p + geom_point(aes(bird, npv, key=key), data = d_sum[s, drop = F], pch = 19, cex = 2, color='black')
+    }
 
     ggplotly(p) %>% layout(dragmode='select')  
   })
@@ -200,6 +204,22 @@ server <- function(input, output, session){
         semi_join(d, by='key')
     }
   })
+  
+  # pts_sel = reactive({
+  #   # get rows selected in table
+  #   s = input$table_rows_selected
+  #   if (length(s)) points(cars[s, , drop = FALSE], pch = 19, cex = 2)
+  #   
+  #   if (length(sel_table)){
+  #     return(mask(r_u, raster::`%in%`(r_i, d_sum$key[sel_table]), maskvalue=0))
+  #   } else{
+  #     return(r_u)
+  #   }
+  #   } else {
+  #     return(mask(r_u, raster::`%in%`(r_i, sel_plot$key), maskvalue=0))
+  #   }
+  # })
+  
   
   # output$table ----
   output$table = renderDataTable({
