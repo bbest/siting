@@ -22,7 +22,7 @@ if (!file.exists(Rdata)){
 
   # utility raster
   r_u = raster(
-    'data/utility/utility_birds-vs-industry8_v2_raster.grd')
+    'data/utility/utility_birds-vs-industry8_v2_raster.grd', values=T)
   
   # color palettes
   pal = colorNumeric(
@@ -69,10 +69,10 @@ if (!file.exists(Rdata)){
   } else {
     
     # bird raster
-    r_b = raster('data/birds/spp_birds_aea_BIRDS_nw.grd')
+    r_b = raster('data/birds/spp_birds_aea_BIRDS_nw.grd', values=T)
     
     # cetacean stack
-    s_c = stack('data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd')
+    s_c = stack('data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd', values=T)
   }
   
   # save all vars to disk
