@@ -47,18 +47,33 @@ if (!file.exists(Rdata)){
       bird    = round(bird, 3),
       npv     = round(npv, 3))
   
-  # bird raster
-  r_b = raster(stack('~/github/consmap-prep/data/birds/spp_birds_aea.grd'), 'BIRDS_nw') %>%
-    crop_na()
-  
-  # cetacean stack, just 12 months of composite values, rescaled 0 to 1
-  s_c = stack('~/github/consmap-prep/data/species/spp_EC_nzw_aea.grd') %>%
-    subset(sprintf('ALL_nfzw_%02d', 1:12)) %>%
-    crop(r_b) %>%
-    mask(r_b)
-  s_min = min(cellStats(s_c, 'min'))
-  s_max = max(cellStats(s_c, 'max'))
-  s_c = (s_c - s_min) / (s_max - s_min)
+  # big rasters
+  if (file.exists('~/github/consmap-prep')){
+    # not available on shiny.env.duke.edu, so do this locally on laptop
+    
+    # bird raster
+    r_b = raster(stack('~/github/consmap-prep/data/birds/spp_birds_aea.grd'), 'BIRDS_nw') %>%
+      crop_na()
+    writeRaster(r_b, 'data/birds/spp_birds_aea_BIRDS_nw.grd', overwrite=T)
+    
+    # cetacean stack, just 12 months of composite values, rescaled 0 to 1
+    s_c = stack('~/github/consmap-prep/data/species/spp_EC_nzw_aea.grd') %>%
+      subset(sprintf('ALL_nfzw_%02d', 1:12)) %>%
+      crop(r_b) %>%
+      mask(r_b)
+    s_min = min(cellStats(s_c, 'min'))
+    s_max = max(cellStats(s_c, 'max'))
+    s_c = (s_c - s_min) / (s_max - s_min)
+    writeRaster(s_c, 'data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd', overwrite=T)
+    
+  } else {
+    
+    # bird raster
+    r_b = raster('data/birds/spp_birds_aea_BIRDS_nw.grd')
+    
+    # cetacean stack
+    s_c = stack('data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd')
+  }
   
   # save all vars to disk
   save(r_u, pal, pal_rev, r_i, d_sum, r_b, s_c, file=Rdata)
