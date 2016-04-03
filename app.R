@@ -1,4 +1,7 @@
-# global ----
+# TODO
+# - read in cetaceans, add png of cetacean over time
+
+# load libraries ----
 suppressPackageStartupMessages({
   library(shiny)
   library(raster)
@@ -10,34 +13,61 @@ suppressPackageStartupMessages({
   library(RColorBrewer)
   library(DT)
 })
+source('functions.R')
 
-# raster of utility
-r_u = raster(
-  'data/utility/utility_birds-vs-industry8_v2_raster.grd')
+# load data ----
+Rdata = 'data/dat.Rdata'
+if (!file.exists(Rdata)){
+  # if loading new data in block below, delete Rdata and run again to regenerate
 
-# raster of ids
-r_i = r_u
-values(r_i) = 1:ncell(r_i)
-
-# color palettes
-pal = colorNumeric(
-  brewer.pal(11, 'Spectral'), values(r_u), na.color='transparent')
-pal_rev = colorNumeric(
-  rev(brewer.pal(11, 'Spectral')), values(r_u), na.color='transparent')
-
-# data frame of utility values
-d_sum = read_csv('data/utility/utility_birds-vs-industry8_v2_data.csv') %>%
-  select(
-    rank,
-    utility = u_avg,
-    bird    = x,
-    npv     = y,
-    key     = i) %>%
-  mutate(
-    utility = round(utility, 3),
-    bird    = round(bird, 3),
-    npv     = round(npv, 3))
-
+  # utility raster
+  r_u = raster(
+    'data/utility/utility_birds-vs-industry8_v2_raster.grd')
+  
+  # color palettes
+  pal = colorNumeric(
+    brewer.pal(11, 'Spectral'), values(r_u), na.color='transparent')
+  pal_rev = colorNumeric(
+    rev(brewer.pal(11, 'Spectral')), values(r_u), na.color='transparent')
+  
+  # id raster
+  r_i = r_u
+  values(r_i) = 1:ncell(r_i)
+  
+  # utility table
+  d_sum = read_csv('data/utility/utility_birds-vs-industry8_v2_data.csv') %>%
+    select(
+      rank,
+      utility = u_avg,
+      bird    = x,
+      npv     = y,
+      key     = i) %>%
+    mutate(
+      utility = round(utility, 3),
+      bird    = round(bird, 3),
+      npv     = round(npv, 3))
+  
+  # bird raster
+  r_b = raster(stack('~/github/consmap-prep/data/birds/spp_birds_aea.grd'), 'BIRDS_nw') %>%
+    crop_na()
+  
+  # cetacean stack, just 12 months of composite values, rescaled 0 to 1
+  s_c = stack('~/github/consmap-prep/data/species/spp_EC_nzw_aea.grd') %>%
+    subset(sprintf('ALL_nfzw_%02d', 1:12)) %>%
+    crop(r_b) %>%
+    mask(r_b)
+  s_min = min(cellStats(s_c, 'min'))
+  s_max = max(cellStats(s_c, 'max'))
+  s_c = (s_c - s_min) / (s_max - s_min)
+  
+  # save all vars to disk
+  save(r_u, pal, pal_rev, r_i, d_sum, r_b, s_c, file=Rdata)
+} else {
+  # speed up start app time by loading Rdata
+  load(Rdata)
+}
+  
+# ui: user interface ----
 ui <- fluidPage(
   navbarPage(title='Conservation',
     tabPanel(
@@ -79,9 +109,16 @@ server <- function(input, output, session){
   })
   
   r_sel = reactive({
+    # get rows selected in plot
     d = event_data('plotly_selected')
     if(is.null(d)){
-      return(r_u)
+      # get rows selected in table
+      rows = input$table_rows_selected
+      if (length(rows)){
+        return(mask(r_u, raster::`%in%`(r_i, d_sum$key[rows]), maskvalue=0))
+      } else{
+        return(r_u)
+      }
     } else {
       return(mask(r_u, raster::`%in%`(r_i, d$key), maskvalue=0))
     }
@@ -123,13 +160,22 @@ server <- function(input, output, session){
       u = extract(r_u, click_aea)
       
       if (!is.na(u)){
+        
+        # get cetaceans over time image
+        png_path = i_cetacean_time_png(i, r_i, s_c)
+        #png_path = 'tmp/i_cetacean_time_1459713210.png'
+        
         row = d_sum %>% filter(key==i)
         leafletProxy('map') %>%
           addPopups(
             click$lng, click$lat, 
             sprintf(
-              'key: %d<br>utility:<strong>%0.3f</strong><br>bird: %0.3f<br>npv: %0.3f', 
-              i, row$utility, row$bird, row$npv), 
+              #   'key: %d<br>utility:<strong>%0.3f</strong><br>bird: %0.3f<br>npv: %0.3f<br>',
+              # i, row$utility, row$bird, row$npv), 
+              paste(
+                'key: %d<br>utility:<strong>%0.3f</strong><br>bird: %0.3f<br>npv: %0.3f<br>',
+                '<img src="%s">'),
+              i, row$utility, row$bird, row$npv, png_path),
             layerId = 'click')
       }
     })
@@ -137,9 +183,10 @@ server <- function(input, output, session){
   
   # Reactive that returns the whole dataset if there is no brush
   d_sel = reactive({
+    # get rows selected in plot
     d = event_data('plotly_selected')
     if(is.null(d)){
-      return(d_sum)
+      d_sum
     } else {
       d_sum %>%
         semi_join(d, by='key')
