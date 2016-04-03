@@ -16,70 +16,63 @@ suppressPackageStartupMessages({
 source('functions.R')
 
 # load data ----
-Rdata = 'data/dat.Rdata'
-if (!file.exists(Rdata)){
-  # if loading new data in block below, delete Rdata and run again to regenerate
 
-  # utility raster
-  r_u = raster(
-    'data/utility/utility_birds-vs-industry8_v2_raster.grd', values=T)
+# utility table
+d_sum = read_csv('data/utility/utility_birds-vs-industry8_v2_data.csv') %>%
+  select(
+    rank,
+    utility = u_avg,
+    bird    = x,
+    npv     = y,
+    key     = i) %>%
+  mutate(
+    utility = round(utility, 3),
+    bird    = round(bird, 3),
+    npv     = round(npv, 3))
   
-  # color palettes
-  pal = colorNumeric(
-    brewer.pal(11, 'Spectral'), values(r_u), na.color='transparent')
-  pal_rev = colorNumeric(
-    rev(brewer.pal(11, 'Spectral')), values(r_u), na.color='transparent')
+# NOTE: reading rasters does not work with save() & load() of *.Rdata
+redo_rasters = F
+
+# utility raster
+r_u = raster(
+  'data/utility/utility_birds-vs-industry8_v2_raster.grd')
+
+# color palettes
+pal = colorNumeric(
+  brewer.pal(11, 'Spectral'), values(r_u), na.color='transparent')
+pal_rev = colorNumeric(
+  rev(brewer.pal(11, 'Spectral')), values(r_u), na.color='transparent')
+
+# id raster
+r_i = r_u
+values(r_i) = 1:ncell(r_i)
+
+# big rasters
+if (file.exists('~/github/consmap-prep') & redo_rasters){
+  # not available on shiny.env.duke.edu, so do this locally on laptop
   
-  # id raster
-  r_i = r_u
-  values(r_i) = 1:ncell(r_i)
+  # bird raster
+  r_b = raster(stack('~/github/consmap-prep/data/birds/spp_birds_aea.grd'), 'BIRDS_nw') %>%
+    crop_na()
+  writeRaster(r_b, 'data/birds/spp_birds_aea_BIRDS_nw.grd', overwrite=T)
   
-  # utility table
-  d_sum = read_csv('data/utility/utility_birds-vs-industry8_v2_data.csv') %>%
-    select(
-      rank,
-      utility = u_avg,
-      bird    = x,
-      npv     = y,
-      key     = i) %>%
-    mutate(
-      utility = round(utility, 3),
-      bird    = round(bird, 3),
-      npv     = round(npv, 3))
+  # cetacean stack, just 12 months of composite values, rescaled 0 to 1
+  s_c = stack('~/github/consmap-prep/data/species/spp_EC_nzw_aea.grd') %>%
+    subset(sprintf('ALL_nfzw_%02d', 1:12)) %>%
+    crop(r_b) %>%
+    mask(r_b)
+  s_min = min(cellStats(s_c, 'min'))
+  s_max = max(cellStats(s_c, 'max'))
+  s_c = (s_c - s_min) / (s_max - s_min)
+  writeRaster(s_c, 'data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd', overwrite=T)
   
-  # big rasters
-  if (file.exists('~/github/consmap-prep')){
-    # not available on shiny.env.duke.edu, so do this locally on laptop
-    
-    # bird raster
-    r_b = raster(stack('~/github/consmap-prep/data/birds/spp_birds_aea.grd'), 'BIRDS_nw') %>%
-      crop_na()
-    writeRaster(r_b, 'data/birds/spp_birds_aea_BIRDS_nw.grd', overwrite=T)
-    
-    # cetacean stack, just 12 months of composite values, rescaled 0 to 1
-    s_c = stack('~/github/consmap-prep/data/species/spp_EC_nzw_aea.grd') %>%
-      subset(sprintf('ALL_nfzw_%02d', 1:12)) %>%
-      crop(r_b) %>%
-      mask(r_b)
-    s_min = min(cellStats(s_c, 'min'))
-    s_max = max(cellStats(s_c, 'max'))
-    s_c = (s_c - s_min) / (s_max - s_min)
-    writeRaster(s_c, 'data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd', overwrite=T)
-    
-  } else {
-    
-    # bird raster
-    r_b = raster('data/birds/spp_birds_aea_BIRDS_nw.grd', values=T)
-    
-    # cetacean stack
-    s_c = stack('data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd', values=T)
-  }
-  
-  # save all vars to disk
-  save(r_u, pal, pal_rev, r_i, d_sum, r_b, s_c, file=Rdata)
 } else {
-  # speed up start app time by loading Rdata
-  load(Rdata)
+  
+  # bird raster
+  r_b = raster('data/birds/spp_birds_aea_BIRDS_nw.grd')
+  
+  # cetacean stack
+  s_c = stack('data/cetaceans/spp_EC_nzw_aea_ALL_nfzw_1to12_scaled0to1.grd')
 }
   
 # ui: user interface ----
@@ -125,17 +118,17 @@ server <- function(input, output, session){
   
   r_sel = reactive({
     # get rows selected in plot
-    d = event_data('plotly_selected')
-    if(is.null(d)){
+    sel_plot = event_data('plotly_selected')
+    if(is.null(sel_plot)){
       # get rows selected in table
-      rows = input$table_rows_selected
-      if (length(rows)){
-        return(mask(r_u, raster::`%in%`(r_i, d_sum$key[rows]), maskvalue=0))
+      sel_table = input$table_rows_selected
+      if (length(sel_table)){
+        return(mask(r_u, raster::`%in%`(r_i, d_sum$key[sel_table]), maskvalue=0))
       } else{
         return(r_u)
       }
     } else {
-      return(mask(r_u, raster::`%in%`(r_i, d$key), maskvalue=0))
+      return(mask(r_u, raster::`%in%`(r_i, sel_plot$key), maskvalue=0))
     }
   })
   
