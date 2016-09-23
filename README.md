@@ -2,7 +2,7 @@
 
 # siting
 
-Siting offshore wind energy to minimize impacts on birds in space and whales in time
+Siting offshore wind energy development to minimize impacts on birds in space and whales in time
 
 ![](siting-wind.png)
 
