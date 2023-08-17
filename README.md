@@ -10,7 +10,7 @@ _Sites on the map (10 km2 pixels) in the US Mid-Atlantic are colored according t
 
 This is a work in progress. You can see the Shiny app here:
 
-  http://shiny.env.duke.edu/bbest/siting
+  https://shiny.ecoquants.com/siting/
 
 ## Acknowledgements
 
